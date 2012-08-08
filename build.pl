@@ -10,7 +10,7 @@ use Getopt::Long;
 my $debug   = 0;
 my $apxs    = 'apxs2';
 my @flags   = do { no warnings; qw[-i -a -c -Wl,-Wall -Wl,-lm]; };
-my $my_lib  = 'mod_cookie2jsonp.c';
+my $my_lib  = 'mod_cookie2json.c';
 my @inc;
 my @link;
 
