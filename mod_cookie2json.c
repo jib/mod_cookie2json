@@ -155,7 +155,7 @@ static int hook(request_rec *r)
                              (strlen(body) ? ", " : "" ),
                              // Quote the key/values - could contain anything
                              "\"", key,      "\": ",
-                             "\"", value,    "\"\n",
+                             "\"", value,    "\"",
                             NULL
                         );
 
@@ -175,11 +175,79 @@ static int hook(request_rec *r)
     _DEBUG && fprintf( stderr, "body will contain: %s\n", body );
 
     // ********************************
+    // Is there a callback?
+    // ********************************
+
+    char *callback = "";
+
+
+    // No query string? nothing to do here
+    if( r->args && strlen( r->args ) > 1 ) {
+
+        // Now, iterate over the pairs in the individual cookie directives.
+        // In the example of 'b=2; c=3' this will give 'b=2' then 'c=3'
+        char *last_pair;
+        char *pair = apr_strtok( apr_pstrdup( r->pool, r->args ), "&", &last_pair );
+
+        while( pair != NULL ) {
+
+            _DEBUG && fprintf( stderr, "Query string pair: %s\n", pair );
+
+            // length of the substr before the = sign (or index of the = sign)
+            int contains_equals_at = strcspn( pair, "=" );
+
+            // Does not contains a =, or starts with a =, meaning it's garbage
+            if( !strstr(pair, "=") || contains_equals_at < 1 ) {
+
+                // And get the next pair -- has to be done at every break
+                pair = apr_strtok( NULL, "=", &last_pair );
+                continue;
+            }
+
+            // So this IS a key value pair. Let's get the key and the value.
+            // first, get the key - everything up to the first =
+            char *key   = apr_pstrndup( r->pool, pair, contains_equals_at );
+
+            // now get the value, everything AFTER the = sign. We do that by
+            // moving the pointer past the = sign.
+            char *value = apr_pstrdup( r->pool, pair );
+            value += contains_equals_at + 1;
+
+            _DEBUG && fprintf( stderr, "qs pair=%s, key=%s, value=%s\n",
+                                        pair, key, value );
+
+            // This might be the callback name - if so we're done
+            if( cfg->callback_name_from && !(strlen( callback )) &&
+                strcasecmp( key, cfg->callback_name_from ) == 0
+            ) {
+
+                // ok, this is our callback
+                callback = value;
+
+                _DEBUG && fprintf( stderr, "using %s as the callback name\n", callback );
+                break;
+            }
+
+            // And get the next pair -- has to be done at every break
+            pair = apr_strtok( NULL, "&", &last_pair );
+            continue;
+        }
+    }
+
+    // ********************************
     // Create the response
     // ********************************
 
-    body = apr_pstrcat( r->pool, "{\n", body, "}\n", NULL );
+    body = apr_pstrcat( r->pool, "{ ", body, " }", NULL );
 
+    // you want it wrapped in a callback?
+    if( strlen( callback ) ) {
+        body = apr_pstrcat( r->pool, callback, "({\n",
+                                "  status: 200,\n",
+                                "  body: ", body, "\n",
+                                "});",
+                                NULL );
+    }
 
     // ********************************
     // Send back the body
@@ -224,22 +292,6 @@ static int hook(request_rec *r)
     rv = ap_pass_brigade( r->output_filters, bucket_brigade );
 
     return OK;
-
-/*
-
-
-
-    apr_brigade_insert_file(bb, f, pos, r->finfo.size - pos, r->pool);
-
-    if (rv != APR_SUCCESS) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r, APLOGNO(01236)
-                      "mod_asis: ap_pass_brigade failed for file %s", r->filename);
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-*/
-
-
-    return OK;
 }
 
 /* ********************************************
@@ -255,6 +307,7 @@ static void *init_settings(apr_pool_t *p, char *d)
 
     cfg = (settings_rec *) apr_pcalloc(p, sizeof(settings_rec));
     cfg->enabled                    = 0;
+    cfg->callback_name_from         = 0;
     cfg->cookie_prefix              = apr_array_make(p, 2, sizeof(const char*) );
 
     return cfg;
