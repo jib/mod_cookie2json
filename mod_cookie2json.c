@@ -63,6 +63,180 @@ static int hook(request_rec *r)
         return DECLINED;
     }
 
+    // the response body
+    char *body = "";
+
+    // ********************************
+    // Parse the cookie
+    // ********************************
+
+    // See if we have any cookies being sent to us. If the client sent a single
+    // cookie header with multiple values, they will be split by a ; For example:
+    // Cookie: a=1; b=2
+    // However, if the client sent multiple cookie headers, with a single value
+    // each, they'll be split by a , For example:
+    // Cookie: a=1, b=2
+    // A combination of the above is also possible, so we might receive a string
+    // like: a=1, b=2; c=3
+    // Support all these cases.
+
+    const char *cookie_header;
+    if( (cookie_header = apr_table_get(r->headers_in, "Cookie")) ){
+
+        _DEBUG && fprintf( stderr, "Cookie header: %s\n", cookie_header );
+
+        // Iterate over each cookie: directive sent
+        char *last_cookie;
+        char *cookie = apr_strtok(
+                            apr_pstrdup( r->pool, cookie_header ), ",", &last_cookie );
+
+        // in the example of 'a=1, b=2; c=3', this gives 'a=1' and then 'b=2; c=3'
+        while( cookie != NULL ) {
+
+            // This MAY contain leading whitespace. Let's get rid of that. I'd use
+            // apr_collapse_spaces, but it removes /all/ whitespace :(
+            // this will return NULL if there's no match, so then just use the
+            // original.
+            while( isspace(*cookie) ) { cookie++; }
+
+            _DEBUG && fprintf( stderr, "Individual cookie: %s\n", cookie );
+
+            // protect against the pathological case where the cookie is malformed
+            // and there's no length left on the cookie now.
+            if( !strlen(cookie) ) {
+                // And get the next cookie -- has to be done at every break
+                cookie = apr_strtok( NULL, ",", &last_cookie );
+
+                continue;
+            }
+
+            // Now, iterate over the pairs in the individual cookie directives.
+            // In the example of 'b=2; c=3' this will give 'b=2' then 'c=3'
+            char *last_pair;
+            char *pair = apr_strtok( apr_pstrdup( r->pool, cookie ), ";", &last_pair );
+
+            while( pair != NULL ) {
+
+                // This MAY contain leading whitespace. Let's get rid of that. I'd use
+                // apr_collapse_spaces, but it removes /all/ whitespace :(
+                // this will return NULL if there's no match, so then just use the
+                // original.
+                while( isspace(*pair) ) { pair++; }
+
+                _DEBUG && fprintf( stderr, "Individual pair: %s\n", pair );
+
+                // From here on, actually process the pairs
+
+                // length of the substr before the = sign (or index of the = sign)
+                int contains_equals_at = strcspn( pair, "=" );
+
+                // Does not contains a =, or starts with a =, meaning it's garbage
+                if( !strstr(pair, "=") || contains_equals_at < 1 ) {
+
+                    // And get the next pair -- has to be done at every break
+                    pair = apr_strtok( NULL, ";", &last_pair );
+
+                    continue;
+                }
+
+                // So this IS a key value pair. Let's get the key and the value.
+                // first, get the key - everything up to the first =
+                char *key   = apr_pstrndup( r->pool, pair, contains_equals_at );
+
+                // now get the value, everything AFTER the = sign. We do that by
+                // moving the pointer past the = sign.
+                char *value = apr_pstrdup( r->pool, pair );
+                value += contains_equals_at + 1;
+
+                body = apr_pstrcat( r->pool,
+                            body,           // what we have so far
+                             // If we already have pairs in here, we need the
+                             // delimiter, otherwise we don't.
+                             (strlen(body) ? ", " : "" ),
+                             // Quote the key/values - could contain anything
+                             "\"", key,      "\": ",
+                             "\"", value,    "\"\n",
+                            NULL
+                        );
+
+                // And get the next pair -- has to be done at every break
+                pair = apr_strtok( NULL, ";", &last_pair );
+            }
+
+            // And get the next cookie -- has to be done at every break
+            cookie = apr_strtok( NULL, ",", &last_cookie );
+        }
+
+    // nothing to see here, move along
+    } else {
+        _DEBUG && fprintf( stderr, "No cookie header present\n" );
+    }
+
+    _DEBUG && fprintf( stderr, "body will contain: %s\n", body );
+
+    // ********************************
+    // Create the response
+    // ********************************
+
+    body = apr_pstrcat( r->pool, "{\n", body, "}\n", NULL );
+
+
+    // ********************************
+    // Send back the body
+    // ********************************
+
+    // create bucket & bucket brigade, following the code in:
+    // http://svn.apache.org/repos/asf/httpd/httpd/trunk/modules/generators/mod_asis.c
+    apr_bucket_brigade *bucket_brigade;
+    apr_bucket *bucket;
+    apr_bucket *eos_bucket;
+
+    // the connection to the client
+    conn_rec *conn = r->connection;
+
+    // create a brigade for the body we're about to return.
+    bucket_brigade = apr_brigade_create( r->pool, conn->bucket_alloc );
+
+    // XXX apr_brigade_puts / apr_brigade_writev seems the 'right' way to
+    // do this, but I can't figure out what the 'flush' and 'ctx' arguments
+    // to the function are supposed to be. Documentation isn't helping and
+    // google doesn't offer anything useful either :(
+    // http://www.apachetutor.org/dev/brigades
+    // http://www.cs.virginia.edu/~jcw5q/talks/apache/bucketbrigades.ac2002.pdf
+
+    // create a bucket for the body we're about to return.
+    bucket      = apr_bucket_pool_create(
+                        body,
+                        (apr_size_t) (strlen(body)),
+                        r->pool,
+                        conn->bucket_alloc
+                    );
+
+    // note that this is end of stream - no more data after this bucket
+    eos_bucket  = apr_bucket_eos_create( conn->bucket_alloc );
+
+    // and append
+    APR_BRIGADE_INSERT_TAIL(bucket_brigade, bucket);
+    APR_BRIGADE_INSERT_TAIL(bucket_brigade, eos_bucket);
+
+    // pass the brigade - we're done
+    apr_status_t rv;
+    rv = ap_pass_brigade( r->output_filters, bucket_brigade );
+
+    return OK;
+
+/*
+
+
+
+    apr_brigade_insert_file(bb, f, pos, r->finfo.size - pos, r->pool);
+
+    if (rv != APR_SUCCESS) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r, APLOGNO(01236)
+                      "mod_asis: ap_pass_brigade failed for file %s", r->filename);
+        return HTTP_INTERNAL_SERVER_ERROR;
+    }
+*/
 
 
     return OK;
