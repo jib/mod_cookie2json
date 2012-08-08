@@ -17,6 +17,8 @@ use LWP::UserAgent;
 
 my $Base                = "http://localhost:7000";
 my $Debug               = 0;
+my $DefaultCookies      = [ Cookie => 'a=1', Cookie => 'b=2; c=3, d' ];
+my $DefaultBody         = '{ "a": "1", "b": "2", "c": "3" }';
 
 GetOptions(
     'base=s'            => \$Base,
@@ -25,12 +27,38 @@ GetOptions(
 
 my %Map     = (
     ### module is not turned on
-    none    => {
-        no_cookie   => 1,
+    "none/200"  => {
+        tests   => [ '' ],  # we expect an empty body
     },
 
     ### straight forward conversion
-    basic   => { },
+    basic       => { },
+
+    ### callback
+    callback    => {
+        query_string    => "foo=bar&callback=cb&baz=zot",
+        tests           => [
+            qr/^cb\({\n/,
+            qr/status: 200,\n/,
+            qr/body: $DefaultBody\n/,
+            qr/}\);$/,
+        ],
+    },
+
+    ### callback missing the callback parameter
+    ### this should NOT return a jsonp callback
+    "callback/missing_query_string" => { },
+
+    ### callback with a different query string
+    ### this should NOT return a jsonp callback
+    "callback/non_matching_query_string" => {
+        query_string    => "foo=bar&baz=zot",
+    },
+
+    ### whitelist - this only allows 'a' and 'b' prefixes
+    whitelist => {
+        tests   => [ '{ "a": "1", "b": "2" }' ],
+    }
 
 );
 
@@ -39,12 +67,16 @@ for my $endpoint ( sort keys %Map ) {
     my $cfg = $Map{ $endpoint };
 
     ### Defaults in case not provided
-    my $header      = $cfg->{header}        || [ ];
+    my $headers     = $cfg->{headers}       || [ ];
+    my $cookies     = $cfg->{cookies}       || $DefaultCookies;
+    my $tests       = $cfg->{tests}         || [ $DefaultBody ];
+    my $qs          = $cfg->{query_string}  || '';
 
     ### build the test
     my $url     = "$Base/$endpoint";
+    $url       .= "?$qs" if $qs;
     my $ua      = LWP::UserAgent->new();
-    my @req     = ($url, @$header );
+    my @req     = ($url, @$cookies, @$headers );
 
     diag "Sending: @req" if $Debug;
 
@@ -54,6 +86,18 @@ for my $endpoint ( sort keys %Map ) {
 
     ### inspect
     ok( $res,                   "Got /$endpoint" );
-    is( $res->code, "204",      "   HTTP Response = 204" );
+    is( $res->code, "200",      "  HTTP Response = 200" );
+
+    ### run the individual tests
+    my $body    = $res->content;
+
+    for my $test (@$tests) {
+        local *isa = *UNIVERSAL::isa;
+
+        isa( $test,  'Regexp' ) ? like( $body, $test, "  Body matches $test" ) :
+        isa( \$test, 'SCALAR' ) ? is( $body,   $test, "  Body = ". ($test || '<none>') ) :
+        '';
+    }
+
 
 }

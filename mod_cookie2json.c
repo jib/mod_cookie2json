@@ -216,8 +216,8 @@ static int hook(request_rec *r)
 
     char *callback = "";
 
-    // No query string? nothing to do here
-    if( r->args && strlen( r->args ) > 1 ) {
+    // No callback name configured, or no query string? nothing to do here
+    if( strlen(cfg->callback_name_from) && r->args && strlen( r->args ) > 1 ) {
 
         // Now, iterate over the pairs in the individual cookie directives.
         // In the example of 'b=2; c=3' this will give 'b=2' then 'c=3'
@@ -342,7 +342,7 @@ static void *init_settings(apr_pool_t *p, char *d)
 
     cfg = (settings_rec *) apr_pcalloc(p, sizeof(settings_rec));
     cfg->enabled                    = 0;
-    cfg->callback_name_from         = 0;
+    cfg->callback_name_from         = "";
     cfg->cookie_prefix              = apr_array_make(p, 2, sizeof(const char*) );
 
     return cfg;
