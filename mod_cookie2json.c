@@ -148,6 +148,42 @@ static int hook(request_rec *r)
                 char *value = apr_pstrdup( r->pool, pair );
                 value += contains_equals_at + 1;
 
+                // Are you whitelisting based on prefixes? If so, let's make sure
+                // this key is ok.
+                // Following tutorial code here again:
+                // http://xrl.us/AprTutorial
+                int i;
+                int is_whitelisted = 0;
+                for( i = 0; i < cfg->cookie_prefix->nelts; i++ ) {
+
+                    char *prefix = ((char **)cfg->cookie_prefix->elts)[i];
+
+                    _DEBUG && fprintf( stderr,
+                                        "checking white list prefix: %s\n", prefix );
+
+                    //it's indeed whiteliested, we should use this value instead
+                    if( strncasecmp( key, prefix, strlen(prefix) ) == 0 ) {
+                        _DEBUG && fprintf( stderr,
+                            "Cookie %s is white listed against %s\n", pair, prefix );
+
+                        is_whitelisted++;
+                        break;
+                    }
+                }
+
+                // if there was a white list but we didn't find a match for this key,
+                // we have to skip it
+                if( !(apr_is_empty_array( cfg->cookie_prefix )) && !is_whitelisted ) {
+                    _DEBUG && fprintf( stderr,
+                        "Cookie %s is not on the whitelist - skipping\n", pair );
+
+                    // And get the next pair -- has to be done at every break
+                    pair = apr_strtok( NULL, ";", &last_pair );
+
+                    continue;
+                }
+
+
                 body = apr_pstrcat( r->pool,
                             body,           // what we have so far
                              // If we already have pairs in here, we need the
@@ -179,7 +215,6 @@ static int hook(request_rec *r)
     // ********************************
 
     char *callback = "";
-
 
     // No query string? nothing to do here
     if( r->args && strlen( r->args ) > 1 ) {
@@ -404,7 +439,6 @@ static void register_hooks(apr_pool_t *p)
     */
     ap_hook_fixups( hook, NULL, NULL, APR_HOOK_REALLY_FIRST );
 }
-
 
 module AP_MODULE_DECLARE_DATA querystring2cookie_module = {
     STANDARD20_MODULE_STUFF,
