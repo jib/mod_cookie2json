@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 ### also test with:
-### curl -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' http://localhost:7000/basic
+### curl -v -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' 'http://localhost:7000/basic?x=y'
 
 ### XXX run out of semaphores? Can happen in testing:
 ### ipcs  | grep 0x0 | awk '{print $2}' | xargs -I% ipcrm -s %
