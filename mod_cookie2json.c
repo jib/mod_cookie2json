@@ -49,14 +49,14 @@ typedef struct {
                                 // query string keys that will not be set in the cookie
 } settings_rec;
 
-module AP_MODULE_DECLARE_DATA querystring2cookie_module;
+module AP_MODULE_DECLARE_DATA cookie2json_module;
 
 // See here for the structure of request_rec:
 // http://ci.apache.org/projects/httpd/trunk/doxygen/structrequest__rec.html
 static int hook(request_rec *r)
 {
     settings_rec *cfg = ap_get_module_config( r->per_dir_config,
-                                              &querystring2cookie_module );
+                                              &cookie2json_module );
 
     /* Do not run in subrequests, don't run if not enabled */
     if( !(cfg->enabled || r->main) ) {
@@ -440,7 +440,7 @@ static void register_hooks(apr_pool_t *p)
     ap_hook_fixups( hook, NULL, NULL, APR_HOOK_REALLY_FIRST );
 }
 
-module AP_MODULE_DECLARE_DATA querystring2cookie_module = {
+module AP_MODULE_DECLARE_DATA cookie2json_module = {
     STANDARD20_MODULE_STUFF,
     init_settings,              /* dir config creater */
     NULL,                       /* dir merger --- default is to override */
