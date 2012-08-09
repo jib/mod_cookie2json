@@ -64,13 +64,16 @@ my %Map     = (
     ### using the "Header" directive when C2JSON was enabled.
     ### Check for that here
     headers => {
-        tests   => [ sub {
-            my $res     = shift;
-            my @header  = $res->header( 'X-C2JSON-Header' );
+        tests   => [
+            $DefaultBody,
+            sub {
+                my $res     = shift;
+                my @header  = $res->header( 'X-C2JSON-Header' );
 
-            is( scalar(@header), 1,              "   Found header: @header" );
-            is( $header[0],      "Not Filtered", "      Header as expected: @header" );
-        } ],
+                is( scalar(@header), 1,              "  Found header: @header" );
+                is( $header[0],      "Not Filtered", "    Header as expected: @header" );
+            },
+        ],
     }
 );
 
