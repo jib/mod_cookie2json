@@ -63,6 +63,11 @@ static int hook(request_rec *r)
         return DECLINED;
     }
 
+    // It's a HEAD request, nothing we want to return here.
+    if( r->header_only ) {
+        return DECLINED;
+    }
+
     // the response body
     char *body = "";
 
@@ -319,12 +324,21 @@ static int hook(request_rec *r)
     eos_bucket  = apr_bucket_eos_create( conn->bucket_alloc );
 
     // and append
-    APR_BRIGADE_INSERT_TAIL(bucket_brigade, bucket);
-    APR_BRIGADE_INSERT_TAIL(bucket_brigade, eos_bucket);
+    APR_BRIGADE_INSERT_TAIL( bucket_brigade, bucket );
+    APR_BRIGADE_INSERT_TAIL( bucket_brigade, eos_bucket );
 
     // pass the brigade - we're done
     apr_status_t rv;
     rv = ap_pass_brigade( r->output_filters, bucket_brigade );
+    apr_brigade_cleanup( bucket_brigade );
+
+    if (rv != APR_SUCCESS ) {
+        _DEBUG && fprintf( stderr,
+                       "mod_cookie2json: ap_pass_brigade failed for %s", r->uri );
+        return HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+
 
     return OK;
 }
@@ -433,11 +447,9 @@ static const command_rec commands[] = {
    ******************************************** */
 
 static void register_hooks(apr_pool_t *p)
-{   /* code gets skipped if modules return a status code from
-       their fixup hooks, so be sure to run REALLY first. See:
-       http://svn.apache.org/viewvc?view=revision&revision=1154620
-    */
-    ap_hook_fixups( hook, NULL, NULL, APR_HOOK_REALLY_FIRST );
+{   // Because this is a /handler/, be sure to use ap_hook_handler, and not
+    // ap_hook_fixups: http://www.apachetutor.org/dev/request
+    ap_hook_handler( hook, NULL, NULL, APR_HOOK_MIDDLE );
 }
 
 module AP_MODULE_DECLARE_DATA cookie2json_module = {

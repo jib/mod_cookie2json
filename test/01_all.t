@@ -58,8 +58,20 @@ my %Map     = (
     ### whitelist - this only allows 'a' and 'b' prefixes
     whitelist => {
         tests   => [ '{ "a": "1", "b": "2" }' ],
-    }
+    },
 
+    ### There was a bug that stopped headers from being set
+    ### using the "Header" directive when C2JSON was enabled.
+    ### Check for that here
+    headers => {
+        tests   => [ sub {
+            my $res     = shift;
+            my @header  = $res->header( 'X-C2JSON-Header' );
+
+            is( scalar(@header), 1,              "   Found header: @header" );
+            is( $header[0],      "Not Filtered", "      Header as expected: @header" );
+        } ],
+    }
 );
 
 for my $endpoint ( sort keys %Map ) {
@@ -96,6 +108,7 @@ for my $endpoint ( sort keys %Map ) {
 
         isa( $test,  'Regexp' ) ? like( $body, $test, "  Body matches $test" ) :
         isa( \$test, 'SCALAR' ) ? is( $body,   $test, "  Body = ". ($test || '<none>') ) :
+        isa( $test,  'CODE'   ) ? $test->( $res ) :
         '';
     }
 
