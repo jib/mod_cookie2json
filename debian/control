@@ -1,0 +1,13 @@
+Source: libapache2-mod-cookie2json
+Section: unknown
+Priority: extra
+Maintainer: Krux Operations Team <charlie@schluting.com>
+Build-Depends: cdbs, debhelper (>= 7), apache2-dev, perl
+Standards-Version: 3.8.3
+Homepage: https://github.com/jib/mod_cookie2json
+
+Package: libapache2-mod-cookie2json
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Apache module to parse cookies to json
+ Return cookie values as json/jsonp callback
