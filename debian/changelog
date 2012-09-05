@@ -1,5 +1,5 @@
-modcookie2json (1.0.0-1) unstable; urgency=low
+libapache2-mod-cookie2json (1.0.0-1) unstable; urgency=low
 
-  * Initial release 
+  * Initial release
 
- -- Krux Operations Team <charlie@schluting.com>  Wed, 05 Sep 2012 22:45:53 +0000
+ -- Krux Operations Team <ops@krux.com>  Wed, 05 Sep 2012 22:45:53 +0000
