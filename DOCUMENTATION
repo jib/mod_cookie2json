@@ -1,0 +1,95 @@
+######################
+### Introduction
+######################
+
+This module allows a set of cookies to be returned as a JSON or
+JSONP response. The main use case for this is to be able to retrieve
+data stored in the cookie for domain X, while the call comes from
+domain Y.
+
+This is quite common when operating widgets or other utilitarian
+JavaScript as a service for third party webpages.
+
+######################
+### Example
+######################
+
+A call to an endpoint with this module enabled might look like this:
+
+  curl -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' http://example.com
+
+And the resulting JSON response would look like this:
+
+  { "a": "1", "b": "2", "c": "3" }
+
+Alternately, a call to the endpoint while callbacks are enabled might
+look like this:
+
+  curl -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' http://example.com?callback=cb
+
+And the resulting JSONP response would look like this:
+
+  cb({
+    status: 200,
+    body: { "a": "1", "b": "2", "c": "3" }
+  });
+
+######################
+### Configuration
+######################
+
+Note: All the directives can be either set in the server config, virtual host,
+directory or .htaccess sections of the configuration.
+
+*** C2JSON directive
+    Syntax:     C2JSON on|off
+    Default:    C2JSON off
+
+    When mod_cookie2json is loaded, and C2JSON on is set, Apache will convert
+    will read the 'Cookie:' headers from the request and convert them into a
+    JSON or JSONP response.
+
+    This directive can be used to turn this behavior on or off on a per-server
+    or per-directory basis. By default, enabling the mod_cookie2json module will
+    not trigger this behaviour, unless this directive is set to 'On'.
+
+    ***NOTE*** This module short cuts the request/response cycle by preparing a
+    response body inside the module. That means that it is best to have a dedicated
+    <Location> directive for this module, as it stops Apache from retrieving a file
+    from disk or passing the request on via ProxyPass or WSGI/mod_perl, etc.
+
+*** C2JSONCallBackNameFrom directive
+    Syntax:     C2JSONCallBackNameFrom token
+    Default:    NULL
+
+    This directive allows you to dynamically set the callback name based on the
+    query parameters that are being sent. For example, if this directive was set
+    to 'callback', the following call:
+
+      curl -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' http://example.com?callback=cb
+
+    Would result in a JSONP response like this:
+
+      cb({
+        status: 200,
+        body: { "a": "1", "b": "2", "c": "3" }
+      });
+
+    If this directive is set, but the parameter is not found in the query string,
+    this module will fall back to a standard JSON response. ie, in the above
+    example, if the query string were omitted, the response would be:
+
+      { "a": "1", "b": "2", "c": "3" }
+
+*** C2JSONPrefix directive
+    Syntax:     C2JSONPrefix String1 String2 ...
+    Default:    NULL
+
+    This directive allows you to selectively return key/value pairs from the
+    'Cookie:' header in a JSON/JSONP response. By setting this directive, every
+    cookie key will be matched against every prefix; if the cookie key starts with
+    the prefix as listed in this directive, it will be included in the response.
+    If not, it will be silently dropped.
+
+    This allows you to explicitly white list the sets of cookies you are willing
+    to expose to a third party. Its use is recommended.
