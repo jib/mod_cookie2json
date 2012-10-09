@@ -327,6 +327,14 @@ static int hook(request_rec *r)
     APR_BRIGADE_INSERT_TAIL( bucket_brigade, bucket );
     APR_BRIGADE_INSERT_TAIL( bucket_brigade, eos_bucket );
 
+    // Set the content type, now that we have a working JSON response
+    // This has to be done /before/ passing the brigade off.
+    // Note, this can't be set using an 'apr_table_addn( r->headers_out .. )
+    // because it will be overwritten by the core:
+    // ./server/config.c: handler = r->content_type ? r->content_type : ap_default_type(r);
+    // Instead, set it directly on r:
+    r->content_type = "text/javascript";
+
     // pass the brigade - we're done
     apr_status_t rv;
     rv = ap_pass_brigade( r->output_filters, bucket_brigade );
@@ -337,8 +345,6 @@ static int hook(request_rec *r)
                        "mod_cookie2json: ap_pass_brigade failed for %s", r->uri );
         return HTTP_INTERNAL_SERVER_ERROR;
     }
-
-
 
     return OK;
 }

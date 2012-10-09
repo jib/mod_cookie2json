@@ -106,6 +106,10 @@ for my $endpoint ( sort keys %Map ) {
     ### run the individual tests
     my $body    = $res->content;
 
+    ### If we have any body tests, that means we got a response, which should be text/javascript:
+    my $ct = length $tests->[0] ? "Text/Javascript" : "Text/Plain";
+    is( lc($res->header('Content-Type')), lc( $ct ), "  Content-Type = $ct" );
+
     for my $test (@$tests) {
         local *isa = *UNIVERSAL::isa;
 
