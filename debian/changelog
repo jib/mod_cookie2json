@@ -1,3 +1,9 @@
+libapache2-mod-cookie2json (1.0.1-2krux1) unstable; urgency=low
+
+  * New build to discern between debian versions
+
+ -- Krux Operations Team <ops@krux.com>  Tue, 24 Mar 2015 00:17:00 +0000
+
 libapache2-mod-cookie2json (1.0.1-1) unstable; urgency=low
 
   * Set Content-Type = text/javascript on valid responses
