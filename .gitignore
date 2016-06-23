@@ -5,3 +5,7 @@
 test/error.log
 test/httpd.pid
 .libs
+
+# CLion build files
+.idea/
+CMakeLists.txt

@@ -36,9 +36,9 @@ my %Map     = (
 
     ### callback
     callback    => {
-        query_string    => "foo=bar&callback=cb&baz=zot",
+        query_string    => "foo=bar&callback=obj.cb&baz=zot",
         tests           => [
-            qr/^cb\({\n/,
+            qr/^obj.cb\({\n/,
             qr/status: 200,\n/,
             qr/body: $DefaultBody\n/,
             qr/}\);$/,
@@ -53,6 +53,26 @@ my %Map     = (
     ### this should NOT return a jsonp callback
     "callback/non_matching_query_string" => {
         query_string    => "foo=bar&baz=zot",
+    },
+
+    ### callback w/ a dangerous character in the param
+    ### this should return a 400
+    "callback/invalid_characters" => {
+        content_type => 'text/html; charset=iso-8859-1',
+        query_string => 'foo=bar&callback=cb()',
+        status       => 400,
+        tests        => [ 'Bad Request' ]
+    },
+
+    ### callback takes any normally used JS func chars
+    "callback/takes_all_valid_chars" => {
+        query_string => 'callback=abcdefghijklmnopqrstuvwxyz.ABCDEFGHIJKLMNOPQRSTUVWXYZ._',
+        tests           => [
+            qr/^abcdefghijklmnopqrstuvwxyz.ABCDEFGHIJKLMNOPQRSTUVWXYZ._\({\n/,
+            qr/status: 200,\n/,
+            qr/body: $DefaultBody\n/,
+            qr/}\);$/,
+        ],
     },
 
     ### whitelist - this only allows 'a' and 'b' prefixes
@@ -82,10 +102,14 @@ for my $endpoint ( sort keys %Map ) {
     my $cfg = $Map{ $endpoint };
 
     ### Defaults in case not provided
-    my $headers     = $cfg->{headers}       || [ ];
-    my $cookies     = $cfg->{cookies}       || $DefaultCookies;
-    my $tests       = $cfg->{tests}         || [ $DefaultBody ];
-    my $qs          = $cfg->{query_string}  || '';
+    my $headers      = $cfg->{headers}       || [ ];
+    my $cookies      = $cfg->{cookies}       || $DefaultCookies;
+    my $status       = $cfg->{status}        || '200';
+    my $tests        = $cfg->{tests}         || [ $DefaultBody ];
+    my $qs           = $cfg->{query_string}  || '';
+
+    ### If we have any body tests, that means we got a response, which should be text/javascript unless told otherwise.
+    my $ct           = $cfg->{content_type}  || (length $tests->[0] ? "text/javascript" : "text/plain");
 
     ### build the test
     my $url     = "$Base/$endpoint";
@@ -100,14 +124,12 @@ for my $endpoint ( sort keys %Map ) {
     diag $res->as_string if $Debug;
 
     ### inspect
-    ok( $res,                   "Got /$endpoint" );
-    is( $res->code, "200",      "  HTTP Response = 200" );
+    ok( $res,                "Got /$endpoint" );
+    is( $res->code, $status, "  HTTP Response = $status" );
 
     ### run the individual tests
     my $body    = $res->content;
 
-    ### If we have any body tests, that means we got a response, which should be text/javascript:
-    my $ct = length $tests->[0] ? "Text/Javascript" : "Text/Plain";
     is( lc($res->header('Content-Type')), lc( $ct ), "  Content-Type = $ct" );
 
     for my $test (@$tests) {

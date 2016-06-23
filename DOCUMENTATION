@@ -81,6 +81,17 @@ directory or .htaccess sections of the configuration.
 
       { "a": "1", "b": "2", "c": "3" }
 
+    The callback parameter is validated to ensure it only contains characters that
+    could be used to define a JS function w/o using quotes on the keys. This prevents
+    arbitrary code execution, but also means the callback cannot be a quoted
+    dereference of a JS object (e.g., a.b.c is ok, but a['b'].c is not). The allowed
+    characters are:
+
+      [a-zA-Z0-9._]
+
+    If the callback does not validate, then the response will be a 400, which can be
+    configured to provide a custom body (see: https://httpd.apache.org/docs/2.4/custom-error.html).
+
 *** C2JSONPrefix directive
     Syntax:     C2JSONPrefix String1 String2 ...
     Default:    NULL
