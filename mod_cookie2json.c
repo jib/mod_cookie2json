@@ -34,7 +34,6 @@
 #include "http_connection.h"
 
 
-#include <math.h>
 
 /* ********************************************
 
@@ -48,6 +47,52 @@
 #define _DEBUG 0
 #endif
 
+
+// mapping from ascii position to T/F allows [.0-9A-Z_a-z] see: http://www.asciitable.com/
+static const char valid_callback_char_table[] = {
+        // null to -
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+
+        1, // .
+        0, // /
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0-9
+        0, 0, 0, 0, 0, 0, 0, // : to @
+
+        // A - Z
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1,
+
+        0, 0, 0, 0, // [ to ^
+        1, // _
+        0, // `
+
+        // a - z
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1,
+
+        // ( to the end
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0
+};
 
 // module configuration - this is basically a global struct
 typedef struct {
@@ -268,12 +313,22 @@ static int hook(request_rec *r)
             if( cfg->callback_name_from && !(strlen( callback )) &&
                 strcasecmp( key, cfg->callback_name_from ) == 0
             ) {
+                _DEBUG && fprintf( stderr, "validating callback %s\n", value);
 
-                // ok, this is our callback
-                callback = value;
+                // validate the callback to avoid script injection under some circumstances
+                char *current = value;
+                while (*current && valid_callback_char_table[*current]) *current++;
 
-                _DEBUG && fprintf( stderr, "using %s as the callback name\n", callback );
-                break;
+                // didn't find a bad char
+                if (*current == '\0') {
+                    // ok, this is our callback
+                    callback = value;
+                    _DEBUG && fprintf(stderr, "using %s as the callback name\n", callback);
+                    break;
+                } else {
+                    _DEBUG && fprintf( stderr, "found unsafe character %c in JSONP callback %s; returning 400\n", *current, value);
+                    return HTTP_BAD_REQUEST;
+                }
             }
 
             // And get the next pair -- has to be done at every break
