@@ -100,6 +100,8 @@ typedef struct {
     char *callback_name_from;   // use this query string keys value as the callback
     apr_array_header_t *cookie_prefix;
                                 // query string keys that will not be set in the cookie
+    apr_array_header_t *callback_prefixes;
+                                // check the callback against this list if it's not empty
 } settings_rec;
 
 module AP_MODULE_DECLARE_DATA cookie2json_module;
@@ -320,7 +322,32 @@ static int hook(request_rec *r)
                 while (*current && valid_callback_char_table[*current]) *current++;
 
                 // didn't find a bad char
-                if (*current == '\0') {
+                if( *current == '\0' ) {
+                    _DEBUG && fprintf( stderr, "validating the callback %s against prefixes\n", value);
+
+                    int i;
+                    int allowed = 1; // Assume it's allowed initially
+                    // now, check that it's allowed by the prefix list
+                    for( i = 0; i < cfg->callback_prefixes->nelts; i++ ) {
+                        allowed = 0; // There's at least one prefix, so mark not allowed until validated.
+
+                        const char *prefix = ((char **)cfg->callback_prefixes->elts)[i];
+                        _DEBUG && fprintf(stderr, "checking callback %s against prefix: %s\n", value, prefix);
+
+                        // check if the value starts with a white-listed prefix.
+                        if( strncasecmp( value, prefix, strlen(prefix) ) == 0 ) {
+                            _DEBUG && fprintf( stderr, "callback %s is allowed %s\n", value, prefix );
+
+                            allowed = 1;
+                            break;
+                        }
+                    }
+
+                    if (!allowed) {
+                        _DEBUG && fprintf( stderr, "found disallowed callback %s in JSONP; returning 400\n", value);
+                        return HTTP_BAD_REQUEST;
+                    }
+
                     // ok, this is our callback
                     callback = value;
                     _DEBUG && fprintf(stderr, "using %s as the callback name\n", callback);
@@ -427,6 +454,7 @@ static void *init_settings(apr_pool_t *p, char *d)
     cfg->enabled                    = 0;
     cfg->callback_name_from         = "";
     cfg->cookie_prefix              = apr_array_make(p, 2, sizeof(const char*) );
+    cfg->callback_prefixes          = apr_array_make(p, 2, sizeof(const char*) );
 
     return cfg;
 }
@@ -461,10 +489,14 @@ static const char *set_config_value(cmd_parms *cmd, void *mconfig,
         const char *str                                   = apr_pstrdup(cmd->pool, value);
         *(const char**)apr_array_push(cfg->cookie_prefix) = str;
 
+        _DEBUG && fprintf( stderr, "prefix white list as str = %s\n", apr_array_pstrcat( cmd->pool, cfg->cookie_prefix, '-' ) );
 
-        char *ary = apr_array_pstrcat( cmd->pool, cfg->cookie_prefix, '-' );
-        _DEBUG && fprintf( stderr, "prefix white list as str = %s\n", ary );
+    /* callback param will be validated against this */
+    } else if( strcasecmp(name, "C2JSONCallBackPrefix") == 0 ) {
+        const char *str                                       = apr_pstrdup(cmd->pool, value);
+        *(const char**)apr_array_push(cfg->callback_prefixes) = str;
 
+        _DEBUG && fprintf( stderr, "callback prefix list as str = %s\n", apr_array_pstrcat( cmd->pool, cfg->callback_prefixes, '-' ) );
     } else {
         return apr_psprintf(cmd->pool, "No such variable %s", name);
     }
@@ -504,8 +536,10 @@ static const command_rec commands[] = {
                   "whether or not to enable querystring to cookie module"),
     AP_INIT_TAKE1("C2JSONCallBackNameFrom",     set_config_value,   NULL, OR_FILEINFO,
                   "the callback name will come from this query paramater"),
-    AP_INIT_ITERATE( "C2JSONPrefix",            set_config_value,   NULL, OR_FILEINFO,
-                  "Only cookies whose key matches these prefixes will be returned" ),
+    AP_INIT_ITERATE("C2JSONCallBackPrefix",     set_config_value,   NULL, OR_FILEINFO,
+                  "the callback name will be validated against these prefixes"),
+    AP_INIT_ITERATE("C2JSONPrefix",             set_config_value,   NULL, OR_FILEINFO,
+                  "only cookies whose key matches these prefixes will be returned" ),
     {NULL}
 };
 
@@ -523,7 +557,7 @@ static void register_hooks(apr_pool_t *p)
 
 module AP_MODULE_DECLARE_DATA cookie2json_module = {
     STANDARD20_MODULE_STUFF,
-    init_settings,              /* dir config creater */
+    init_settings,              /* dir config creator */
     NULL,                       /* dir merger --- default is to override */
     NULL,                       /* server config */
     NULL,                       /* merge server configs */

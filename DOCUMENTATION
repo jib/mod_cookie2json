@@ -104,3 +104,40 @@ directory or .htaccess sections of the configuration.
 
     This allows you to explicitly white list the sets of cookies you are willing
     to expose to a third party. Its use is recommended.
+
+*** C2JSONCallBackPrefix directive
+    Syntax:     C2JSONCallBackPrefix String1 String2 ...
+    Default:    NULL
+
+    This directive restricts the value taken from the param named in C2JSONCallBackNameFrom
+    allowing only those that start with the provided prefix(es). If no setting is given, then
+    prefix validation is skipped. If a callback is supplied and there is no matching prefix
+    response will be a HTTP 400 Bad Request. The prefix is matched disregarding case.
+
+    For example, if this directive is set to `C2JSONCallBackPrefix foo baz`, the following call:
+
+      curl -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' http://example.com?callback=foo_bar_baz
+
+    Would result in a JSONP response like this:
+
+      foo_bar_baz({
+        status: 200,
+        body: { "a": "1", "b": "2", "c": "3" }
+      });
+
+    Another example, if the value is again set to 'foo baz', the following call:
+
+      curl -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' http://example.com?callback=BAZ_QUX
+
+    Would result in a JSONP response like this:
+
+      BAZ_QUX({
+        status: 200,
+        body: { "a": "1", "b": "2", "c": "3" }
+      });
+
+    While a call like:
+
+      curl -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' http://example.com?callback=bar_baz
+
+    Would result in an HTTP 400 Bad Request.

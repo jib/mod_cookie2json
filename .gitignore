@@ -6,6 +6,10 @@ test/error.log
 test/httpd.pid
 .libs
 
+# Debian packaging that should be generated at build time
+debian/libapache2-mod-cookie2json/
+debian/libapache2-mod-cookie2json.debhelper.log
+
 # CLion build files
-.idea/
-CMakeLists.txt
+/.idea/
+/CMakeLists.txt

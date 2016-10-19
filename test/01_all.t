@@ -67,12 +67,64 @@ my %Map     = (
     ### callback takes any normally used JS func chars
     "callback/takes_all_valid_chars" => {
         query_string => 'callback=abcdefghijklmnopqrstuvwxyz.ABCDEFGHIJKLMNOPQRSTUVWXYZ._',
-        tests           => [
+        tests        => [
             qr/^abcdefghijklmnopqrstuvwxyz.ABCDEFGHIJKLMNOPQRSTUVWXYZ._\({\n/,
             qr/status: 200,\n/,
             qr/body: $DefaultBody\n/,
             qr/}\);$/,
         ],
+    },
+
+    ### callback can be exactly a valid prefix
+    "callback_prefix/takes_first_callback_prefix" => {
+        query_string => 'foo=bar&callback=valid_prefix',
+        tests        => [
+            qr/^valid_prefix\({\n/,
+            qr/status: 200,\n/,
+            qr/body: $DefaultBody\n/,
+            qr/}\);$/,
+        ],
+    },
+
+    ### callback matches case-sensitive
+    "callback_prefix/compares_callback_prefix_ignoring_case" => {
+        query_string => 'foo=bar&callback=VALID_PREFIX',
+        tests        => [
+            qr/^VALID_PREFIX\({\n/,
+            qr/status: 200,\n/,
+            qr/body: $DefaultBody\n/,
+            qr/}\);$/,
+        ],
+    },
+
+    ### callback can start w/ a valid prefix and have more stuff
+    "callback_prefix/takes_first_callback_prefix_with_more" => {
+        query_string => 'foo=bar&callback=valid_prefix_abc',
+        tests        => [
+            qr/^valid_prefix_abc\({\n/,
+            qr/status: 200,\n/,
+            qr/body: $DefaultBody\n/,
+            qr/}\);$/,
+        ],
+    },
+
+    ### callback can start w/ a different valid prefix from same setting
+    "callback_prefix/takes_second_callback_prefix_with_more" => {
+        query_string => 'foo=bar&callback=other_valid_prefix_abc',
+        tests        => [
+            qr/^other_valid_prefix_abc\({\n/,
+            qr/status: 200,\n/,
+            qr/body: $DefaultBody\n/,
+            qr/}\);$/,
+        ],
+    },
+
+    ### callback mustn't start w/ invalid callback
+    "callback_prefix/blocks_invalid_callback_prefix_with_more" => {
+        content_type => 'text/html; charset=iso-8859-1',
+        query_string => 'foo=bar&callback=foo_bar',
+        status       => 400,
+        tests        => [ 'Bad Request' ]
     },
 
     ### whitelist - this only allows 'a' and 'b' prefixes
@@ -140,6 +192,4 @@ for my $endpoint ( sort keys %Map ) {
         isa( $test,  'CODE'   ) ? $test->( $res ) :
         '';
     }
-
-
 }
